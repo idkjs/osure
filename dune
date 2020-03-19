@@ -1,0 +1,3 @@
+(executable
+ (name rsure)
+ (libraries core rsure))
