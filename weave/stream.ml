@@ -72,9 +72,10 @@ let setup (zbuf : 'a Zlib.t) =
 (* Run zlib's flate, accepting only "Ok" as the response, and raising
  * an exception if it does something else. *)
 let flate zbuf =
-  (* zdump zbuf "flate"; *)
+  zdump zbuf "flate";
   match Zlib.flate zbuf Zlib.No_flush with
     | Zlib.Ok -> ()
+    | Zlib.Stream_end -> ()
     | _ -> failwith "Problem running zlib"
 
 (* Reset the input buffer if that makes sense. *)
@@ -139,14 +140,6 @@ let send_bytes (zbuf : 'a Zlib.t) ~data ~(drain : drain) =
     end in
   loop 0 (String.length data)
 
-(* A drain can take data out of the sync.  It is given a segment of a
- * Bigstring, and can consume however much data it wishes to.  If it
- * does not consume the entire buffer, the process operation will end.
- * Returns the number of bytes it has consumed.
- *)
-
-(* type fill = Bigstring.t -> pos:int -> len:int -> int *)
-
 (* Open a new file, intended for compression. *)
 let gzip_out name =
   let fd = OC.create ~binary:true ~fail_if_exists:true ~perm:0o644 name in
@@ -183,22 +176,117 @@ let gzip_out name =
   end
 ;;
 
+(* inflating (reading from a gzip file) has slightly different buffing
+ * requirements.  We will fill the input buffer when it is drained,
+ * AND when there is no unprocessed input left.  In order to partially
+ * process the input, we need to carry an additional reference to the
+ * read position (called rpos in the code) of the next character to
+ * read. *)
+
+(** Fill up the input buffer by reading from the given channel.
+ * Returns the number of bytes read.  If this returns zero it means we
+ * have reached the end of the input.  Since we only call this when
+ * the output buffer is exhausted, this is the end of file indication.
+ * The temp buffer is used because IO is currently not supported
+ * directly with Bigstrings.
+ *)
+let fill_in (zbuf : Zlib.inflate Zlib.t) ~(chan: IC.t) ~(tmp : Bytes.t) ~(eofd : bool ref) =
+  let len = IC.input chan ~buf:tmp ~pos:0 ~len:(Bigstring.length zbuf.in_buf) in
+  if len > 0 then begin
+    Bigstring.From_bytes.blit
+      ~src:tmp ~src_pos:0
+      ~dst:zbuf.in_buf ~dst_pos:0
+      ~len:len;
+    zbuf.in_ofs <- 0;
+    zbuf.in_len <- len
+  end else eofd := true;
+  (* zdump zbuf "fill_in"; *)
+  len
+
+(** Determine if the input buffer is empty. *)
+let input_empty (zbuf : Zlib.inflate Zlib.t) = zbuf.in_len = 0
+
+(** Read as many bytes that we can out of the output buffer, stopping
+ * when we reach a newline.  Returns `Done if we have read the
+ * newline, and `More if there are more bytes to be read.  On `Done,
+ * the final newline is not placed into the dest buffer, but it is
+ * skipped. *)
+let get_string (zbuf : Zlib.inflate Zlib.t) (rpos : int ref) (dest : Buffer.t) =
+  let rec loop () =
+    if !rpos = zbuf.out_ofs then `More
+    else begin
+      let ch = Bigstring.get zbuf.out_buf !rpos in
+      incr rpos;
+      if Char.(=) ch '\n' then `Done
+      else begin
+        Buffer.add_char dest ch;
+        loop ()
+      end
+    end in
+  loop ()
+
+(** Run flate as necessary, filling the input buffer if needed, and
+ * getting strings until we have a string.  Returns None if we reach
+ * end of file, or Some text if there is a line available.  If EOF is
+ * reached not immediately after a newline, it will fail. *)
+let inflate_flate (zbuf : Zlib.inflate Zlib.t) ~rpos ~chan ~tmp ~eofd =
+  (* Test for input at the beginning, because EOF is acceptable here.
+   *)
+  if input_empty zbuf && !eofd && !rpos = zbuf.out_ofs then None
+  else begin
+    (if not !eofd then let _ = fill_in zbuf ~chan ~tmp ~eofd in ());
+    let dest = Buffer.create 128 in
+    let rec loop () =
+      (* zdump zbuf (sprintf "flate rpos:%d" !rpos); *)
+      match get_string zbuf rpos dest with
+        | `More ->
+            zdump zbuf (sprintf "returned more iempty:%b" (input_empty zbuf));
+            if input_empty zbuf && !eofd then failwith "Invalid EOF";
+            (if input_empty zbuf then let _ = fill_in zbuf ~chan ~tmp ~eofd in ());
+            rpos := 0;
+            zbuf.out_ofs <- 0;
+            zbuf.out_len <- Bigstring.length zbuf.out_buf;
+            flate zbuf;
+            loop ()
+        | `Done -> Some (Buffer.contents dest) in
+    loop ()
+  end
+
 (* Open an existing gzipped file. *)
 let gzip_in name =
   let fd = IC.create name in
   let zbuf = Zlib.create_inflate ~window_bits:31 () in
-  zbuf.in_len <- 0;
-  zbuf.out_buf <- Bigstring.create 4096;
-  zbuf.out_ofs <- 0;
-  zbuf.out_len <- Bigstring.length zbuf.out_buf;
-  let fill () =
-    let block = Bytes.create 4096 in
-    let len = IC.input fd ~buf:block ~pos:0 ~len:(Bytes.length block) in
-    zbuf.in_buf <- Bigstring.of_bytes block ~pos:0 ~len:len;
-    zbuf.in_ofs <- 0;
-    zbuf.in_len <- len in
+  setup zbuf;
+  let rpos = ref 0 in
+  let eofd = ref false in
+  let tmp_buf = Bytes.create (Bigstring.length zbuf.in_buf) in
+
+  (* Is the input buffer empty? *)
+  let input_empty () = zbuf.in_len = 0 in
+
+  (* Try filling the input buffer, if that makes sense. *)
+  let fill_in () =
+    if not !eofd && input_empty () then begin
+      let len = IC.input fd ~buf:tmp_buf ~pos:0 ~len:(Bigstring.length zbuf.in_buf) in
+      if len > 0 then begin
+        Bigstring.From_bytes.blit
+          ~src:tmp_buf ~src_pos:0
+          ~dst:zbuf.in_buf ~dst_pos:0
+          ~len:len;
+        zbuf.in_ofs <- 0;
+        zbuf.in_len <- len
+      end else
+        eofd := true
+    end in
+
+  (* Read a byte out of the output buffer, and add it to the given
+   * buffer.  Return `Step if a byte was copied, `Done we reached the
+   * newline, and `More if there were no characters to read. *)
+
   object
     method read_line =
+      inflate_flate zbuf ~rpos ~chan:fd ~tmp:tmp_buf ~eofd
+      (*
       if zbuf.in_len = 0 then fill ();
       if zbuf.in_len = 0 then None
       else begin
@@ -228,6 +316,7 @@ let gzip_in name =
             | _ -> failwith "Decompress error"
         in outer_loop ()
       end
+      *)
     method close = IC.close fd
     method to_name = failwith "to_name unsupported with zlib"
   end
@@ -252,6 +341,7 @@ let bulk_io () =
     match ifd#read_line with
       | None -> i
       | Some line ->
+          (* printf "line: %S\n" line; *)
           assert String.(line = sprintf "This is a line %d in the file" i);
           loop (i + 1) in
   assert (loop 1 = count + 1);
