@@ -13,5 +13,8 @@ type reader = <
 val create_out : string -> writer
 val open_in : string -> reader
 
+val gzip_out : string -> writer
+val gzip_in : string -> reader
+
 (* Benchmark *)
 val bulk_io : unit -> unit
