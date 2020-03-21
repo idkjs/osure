@@ -1,6 +1,8 @@
 open Core
 open Rsure
 
-let _ =
+let nothing () =
   Sequence.iter (Walk.walk ".") ~f:(fun e ->
     print_endline @@ Node.show e)
+
+let _ = Weave.Stream.bulk_io ()
