@@ -5,22 +5,43 @@
 
 open Core
 
-(* The simple nameing convention has a basename, with the main file
+type t = <
+  new_temp : bool -> Stream.writer;
+  main_file : string;
+  backup_file : string;
+  is_compressed : bool >
+
+(* The simple naming convention has a basename, with the main file
  * having a specified extension, the backup file having a ".bak"
  * extension, and the temp files using a numbered extension starting
  * with ".0".  If the names are intended to be compressed, a ".gz"
  * suffix can also be added.
  *)
 
-type simple_naming = {
-  path : string;
-  base : string;
-  ext : string;
-  compress : bool
-}
+let simple_naming ~path ~base ~ext ~compress =
+  let make_name ext compressed =
+    path ^/ sprintf "%s.%s%s" base ext (if compressed then ".gz" else "") in
 
-let make_name sn ext compressed =
-  sprintf "%s.%s%s" sn.base ext (if compressed then ".gz" else "")
+  (* Construct a new output file. *)
+  let temp_file this_compress =
+    let make = if this_compress then Stream.create_out else Stream.gzip_out in
+    let rec loop n =
+      let name = make_name (Int.to_string n) this_compress in
+      let fd = try Some (make name) with
+        | Sys_error _ -> None in
+      match fd with
+        | None -> loop (n + 1)
+        | Some fd -> fd in
+    loop 0 in
 
-(* Construct a new output file. *)
-(* let temp_file sn compressed = () *)
+  object
+    method new_temp this_compress = temp_file this_compress
+    method main_file = make_name ext compress
+    method backup_file = make_name "bak" compress
+    method is_compressed = compress
+  end
+
+let trial () =
+  let sn = simple_naming ~path:"." ~base:"haha" ~ext:"dat" ~compress:true in
+  let f1 = sn#new_temp true in
+  printf "name: %s\n" f1#to_name

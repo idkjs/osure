@@ -17,3 +17,6 @@ let bench_gzip_in () =
   let total = loop 0 in
   fd#close;
   printf "%d lines\n" total
+
+let _ =
+  Weave.Naming.trial ()
