@@ -288,6 +288,18 @@ let gzip_in name =
     method to_name = failwith "to_name unsupported with zlib"
   end
 
+let with_gen opener ~f path =
+  let fd = opener path in
+  let res = try Ok (f fd) with
+    | ex -> Error ex in
+  fd#close;
+  match res with
+    | Ok result -> result
+    | Error ex -> raise ex
+
+let with_in ~gzip ~f path = with_gen (if gzip then gzip_in else open_in) ~f path
+let with_out ~gzip ~f path = with_gen (if gzip then gzip_out else create_out) ~f path
+
 (* A bulk test, to get an idea of timing. *)
 let bulk_io () =
   let count = 1_000_000 in

@@ -16,6 +16,9 @@ let main_reader sn =
   let opener = if sn#is_compressed then Stream.gzip_in else Stream.open_in in
   opener sn#main_file
 
+(* Open a reader, closing at the end. *)
+let with_main_reader sn = Stream.with_in ~gzip:sn#is_compressed sn#main_file
+
 (* The simple naming convention has a basename, with the main file
  * having a specified extension, the backup file having a ".bak"
  * extension, and the temp files using a numbered extension starting

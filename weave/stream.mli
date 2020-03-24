@@ -16,5 +16,8 @@ val open_in : string -> reader
 val gzip_out : string -> writer
 val gzip_in : string -> reader
 
+val with_in : gzip:bool -> f:(reader -> 'a) -> string -> 'a
+val with_out : gzip:bool -> f:(writer -> 'a) -> string -> 'a
+
 (* Benchmark *)
 val bulk_io : unit -> unit

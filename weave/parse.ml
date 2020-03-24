@@ -191,30 +191,25 @@ let test_check path delta expected =
   let base = Filename.chop_suffix (Filename.basename path) ".dat" in
   let path = Filename.dirname path in
   let sn = Naming.simple_naming ~path ~base ~ext:"dat" ~compress:false in
-  let rd = Naming.main_reader sn in
-
-  (*
-  let _ = expected in
-  pusher rd ~delta
-  *)
-
-  let nums = Array.of_list (List.rev (Numeric_Pusher.run rd ~delta ~ustate:[])) in
-  (* printf "exp: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t expected); *)
-  (* printf "got: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t nums); *)
-  rd#close;
-  assert (Array.equal Int.equal nums expected);
+  Naming.with_main_reader sn ~f:(fun rd ->
+    let nums = Array.of_list (List.rev (Numeric_Pusher.run rd ~delta ~ustate:[])) in
+    (* printf "exp: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t expected); *)
+    (* printf "got: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t nums); *)
+    assert (Array.equal Int.equal nums expected);
+  );
 
   (* Run, stopping at 50, and make sure it still gets everything. *)
-  let rd = Naming.main_reader sn in
-  let st = Numeric_Pusher.make rd ~delta in
-  let (stop, st, ust) = Numeric_Pusher.push_to ~stop:50 st [] in
-  assert (stop = 50);
-  assert (List.length ust = 49);  (* before the stop *)
-  let (stop, _, ust) = Numeric_Pusher.push_to st ust in
-  assert (stop = 0);
-  let nums = List.to_array ust in
-  Array.rev_inplace nums;
-  assert (Array.equal Int.equal nums expected)
+  Naming.with_main_reader sn ~f:(fun rd ->
+    let st = Numeric_Pusher.make rd ~delta in
+    let (stop, st, ust) = Numeric_Pusher.push_to ~stop:50 st [] in
+    assert (stop = 50);
+    assert (List.length ust = 49);  (* before the stop *)
+    let (stop, _, ust) = Numeric_Pusher.push_to st ust in
+    assert (stop = 0);
+    let nums = List.to_array ust in
+    Array.rev_inplace nums;
+    assert (Array.equal Int.equal nums expected)
+  )
 
   (*
   pusher rd ~delta
