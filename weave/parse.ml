@@ -9,7 +9,7 @@ type line =
   | Delete of int
   | End of int
   | Done
-[@@deriving show]
+(* [@@deriving show] *)
 
 (* Extract the field information.  The lines are always of the form
  * "\x01C nnn" where C is a command, and nnn is a decimal integer.
@@ -36,12 +36,13 @@ let rec next_line rd =
           Plain line
 
 type state_mode = Keep | Skip | Next
-[@@deriving show, sexp]
+(* [@@deriving show, sexp] *)
 
 type state = {
   keeps : (int, state_mode, Int.comparator_witness) Map.t;
   keep : bool }
 
+(*
 let show_state st =
   let buf = Buffer.create 64 in
   bprintf buf "[%b" st.keep;
@@ -49,6 +50,7 @@ let show_state st =
     bprintf buf "; %d->%s" key (show_state_mode data));
   bprintf buf "]";
   Buffer.contents buf
+*)
 
 let init () = { keeps = Map.empty (module Int); keep = false }
 
@@ -138,6 +140,7 @@ module Pusher (S : Sink) = struct
 end
 
 (* Run a push parser over the input. *)
+(*
 let pusher rd ~delta =
   let rec loop st =
     let line = next_line rd in
@@ -147,6 +150,7 @@ let pusher rd ~delta =
       | Done -> ()
       | _ -> loop st2
   in loop (init ())
+*)
 
 let sample () =
   let sn = Naming.simple_naming ~path:"/" ~base:"2sure" ~ext:"dat" ~compress:true in
