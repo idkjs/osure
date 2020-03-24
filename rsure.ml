@@ -18,5 +18,8 @@ let bench_gzip_in () =
   fd#close;
   printf "%d lines\n" total
 
-let _ =
+let naming _ =
   Weave.Naming.trial ()
+
+let () =
+  Weave.Parse.sample ()

@@ -1,3 +1,4 @@
 (library
   (name weave)
-  (libraries core zlib))
+  (libraries core zlib)
+  (preprocess (pps ppx_deriving.show ppx_sexp_conv)))

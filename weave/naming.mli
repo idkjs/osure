@@ -8,4 +8,6 @@ type t = <
 
 val simple_naming : path:string -> base:string -> ext:string -> compress:bool -> t
 
+val main_reader : t -> Stream.reader
+
 val trial : unit -> unit
