@@ -41,6 +41,7 @@ type state_mode = Keep | Skip | Next
 module State = struct
   type t = {
     rd : Stream.reader;
+    pending : string option;
     delta : int;
     keeps : (int, state_mode, Int.comparator_witness) Map.t;
     keep : bool;
@@ -57,7 +58,11 @@ let show_state st =
   Buffer.contents buf
 *)
 
-let init rd delta : State.t = { rd; delta; keeps = Map.empty (module Int); keep = false; lineno = 0 }
+let init rd delta : State.t = {
+  rd; delta;
+  pending = None;
+  keeps = Map.empty (module Int);
+  keep = false; lineno = 0 }
 
 (* Compute the value of keep from a given map.  Iterated as a lazy
  * sequence, because the iterator stops at the first element *)
@@ -115,6 +120,10 @@ module Pusher (S : Sink) = struct
   let make rd ~delta = init rd delta
 
   let push_to ?(stop=0) (st : State.t) ustate =
+    let st, ustate = match st.pending with
+      | None -> st, ustate
+      | Some text ->
+          ({ st with pending = None }, S.plain ustate text st.keep) in
     let _ = stop in
     let rec loop (st : State.t) ust =
       let line = next_line st.rd in
@@ -131,8 +140,13 @@ module Pusher (S : Sink) = struct
             let ust' = S.ending ust delta in
             loop st' ust'
         | Plain text ->
-            let ust' = S.plain ust text st'.keep in
-            loop st' ust'
+            let st' = if st'.keep then { st' with lineno = st'.lineno + 1 } else st' in
+            if st'.keep && st'.lineno = stop then
+              let st' = { st' with pending = Some text } in
+              (stop, st', ust)
+            else
+              let ust' = S.plain ust text st'.keep in
+              loop st' ust'
         | Header _ ->
             (* TODO, should there be a call for this? *)
             loop st' ust in
@@ -187,7 +201,21 @@ let test_check path delta expected =
   let nums = Array.of_list (List.rev (Numeric_Pusher.run rd ~delta ~ustate:[])) in
   (* printf "exp: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t expected); *)
   (* printf "got: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t nums); *)
+  rd#close;
+  assert (Array.equal Int.equal nums expected);
+
+  (* Run, stopping at 50, and make sure it still gets everything. *)
+  let rd = Naming.main_reader sn in
+  let st = Numeric_Pusher.make rd ~delta in
+  let (stop, st, ust) = Numeric_Pusher.push_to ~stop:50 st [] in
+  assert (stop = 50);
+  assert (List.length ust = 49);  (* before the stop *)
+  let (stop, _, ust) = Numeric_Pusher.push_to st ust in
+  assert (stop = 0);
+  let nums = List.to_array ust in
+  Array.rev_inplace nums;
   assert (Array.equal Int.equal nums expected)
+
   (*
   pusher rd ~delta
   printf "path: %S\n" path;
