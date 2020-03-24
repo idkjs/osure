@@ -17,7 +17,23 @@ module type Sink = sig
 end
 
 module Pusher (S : Sink) : sig
-  val pusher : Stream.reader -> delta:int -> s0:S.t -> S.t
+  val run : Stream.reader -> delta:int -> ustate:S.t -> S.t
+  (** Simple case, run the entire process. *)
+
+  type state
+  (** An internal state to allow the parser to be run in pieces. *)
+
+  val make : Stream.reader -> delta:int -> state
+  (** Construct the initial parser state, reading from a given reader,
+   * intending to extract a particular delta. *)
+
+  val push_to : ?stop:int -> state -> S.t -> (int * state * S.t)
+  (** Run the parser (pushing) through.  The stop value indicates when
+   * the parser should stop.  A value of 0 indicates it should run
+   * through to the end.  A non-zero value indicates it should stop
+   * when reaching the given line of input (before the line is
+   * pushed).  The return result is the line stopped on, the new state
+   * of the parser, and the updated value of the user state. *)
 end
 
 val test_check : string -> int -> int array -> unit

@@ -38,31 +38,26 @@ let rec next_line rd =
 type state_mode = Keep | Skip | Next
 (* [@@deriving show, sexp] *)
 
-type state = {
-  keeps : (int, state_mode, Int.comparator_witness) Map.t;
-  keep : bool }
+module State = struct
+  type t = {
+    rd : Stream.reader;
+    delta : int;
+    keeps : (int, state_mode, Int.comparator_witness) Map.t;
+    keep : bool;
+    lineno : int }
+end
 
 (*
 let show_state st =
   let buf = Buffer.create 64 in
-  bprintf buf "[%b" st.keep;
+  bprintf buf "[(%d)%b" st.lineno st.keep;
   Map.iteri st.keeps ~f:(fun ~key ~data ->
     bprintf buf "; %d->%s" key (show_state_mode data));
   bprintf buf "]";
   Buffer.contents buf
 *)
 
-let init () = { keeps = Map.empty (module Int); keep = false }
-
-(*
-type state = {
-  keep : (int, state_mode, Int.comparator_witness) Map.t;
-  line : int
-}
-(* [@@deriving sexp] *)
-
-let init () = { keep = Map.empty (module Int); line = 0 }
-*)
+let init rd delta : State.t = { rd; delta; keeps = Map.empty (module Int); keep = false; lineno = 0 }
 
 (* Compute the value of keep from a given map.  Iterated as a lazy
  * sequence, because the iterator stops at the first element *)
@@ -78,13 +73,13 @@ let get_keep keeps =
 (* Given an existing state, update that state based on a particular
  * line.  Passed in is the old state, the desired delta (needed to
  * keep the state meaningful), and it returns the new state. *)
-let update ostate desired line =
-  let next nkeeps = { keeps = nkeeps; keep = get_keep nkeeps } in
+let update (ostate : State.t) line =
+  let next nkeeps = { ostate with keeps = nkeeps; keep = get_keep nkeeps } in
   match line with
     | Insert lev ->
-        next @@ Map.add_exn ostate.keeps ~key:lev ~data:(if desired >= lev then Keep else Skip)
+        next @@ Map.add_exn ostate.keeps ~key:lev ~data:(if ostate.delta >= lev then Keep else Skip)
     | Delete lev ->
-        next @@ Map.add_exn ostate.keeps ~key:lev ~data:(if desired >= lev then Skip else Next)
+        next @@ Map.add_exn ostate.keeps ~key:lev ~data:(if ostate.delta >= lev then Skip else Next)
     | End lev ->
         next @@ Map.remove ostate.keeps lev
     | _ -> ostate
@@ -115,12 +110,17 @@ module Empty_Sink : Sink = struct
 end
 
 module Pusher (S : Sink) = struct
-  let pusher rd ~delta ~s0 =
-    let rec loop st ust =
-      let line = next_line rd in
-      let st' = update st delta line in
+  type state = State.t
+
+  let make rd ~delta = init rd delta
+
+  let push_to ?(stop=0) (st : State.t) ustate =
+    let _ = stop in
+    let rec loop (st : State.t) ust =
+      let line = next_line st.rd in
+      let st' = update st line in
       match line with
-        | Done -> ust
+        | Done -> (0, st', ust)
         | Insert delta ->
             let ust' = S.insert ust delta in
             loop st' ust'
@@ -136,21 +136,13 @@ module Pusher (S : Sink) = struct
         | Header _ ->
             (* TODO, should there be a call for this? *)
             loop st' ust in
-    loop (init ()) s0
-end
+    loop st ustate
 
-(* Run a push parser over the input. *)
-(*
-let pusher rd ~delta =
-  let rec loop st =
-    let line = next_line rd in
-    let st2 = update st delta line in
-    printf "line: %s  state: %s\n" (show_line line) (show_state st2);
-    match line with
-      | Done -> ()
-      | _ -> loop st2
-  in loop (init ())
-*)
+  let run rd ~delta ~ustate =
+    let st0 = make rd ~delta in
+    let _, _, ustate' = push_to st0 ustate in
+    ustate'
+end
 
 let sample () =
   let sn = Naming.simple_naming ~path:"/" ~base:"2sure" ~ext:"dat" ~compress:true in
@@ -192,7 +184,7 @@ let test_check path delta expected =
   pusher rd ~delta
   *)
 
-  let nums = Array.of_list (List.rev (Numeric_Pusher.pusher rd ~delta ~s0:[])) in
+  let nums = Array.of_list (List.rev (Numeric_Pusher.run rd ~delta ~ustate:[])) in
   (* printf "exp: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t expected); *)
   (* printf "got: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t nums); *)
   assert (Array.equal Int.equal nums expected)
