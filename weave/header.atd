@@ -1,0 +1,15 @@
+(* Header type definitions. *)
+
+type json <ocaml module="Yojson.Safe" t="t"> = abstract
+
+type version = {
+  name : string;
+  number : int;
+  tags : json;
+  time : string
+}
+
+type header = {
+  version : int;
+  deltas : version list
+}

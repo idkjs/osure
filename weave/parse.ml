@@ -185,6 +185,13 @@ end
 
 module Numeric_Pusher = Pusher (Numeric_Sink)
 
+(* A special case, that reads just the header from the file.  It
+ * expects the header to be the first thing read from the file. *)
+let read_header rd =
+  match next_line rd with
+    | Header text -> text
+    | _ -> failwith "Invalid header line read"
+
 (* Test entrance. *)
 let test_check path delta expected =
   (* let delta = 1 in *)

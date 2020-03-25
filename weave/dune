@@ -1,4 +1,14 @@
 (library
   (name weave)
-  (libraries core zlib)
+  (libraries core zlib yojson atdgen-runtime)
   (preprocess (pps ppx_deriving.show ppx_sexp_conv)))
+
+(rule
+  (targets header_j.ml header_j.mli)
+  (deps header.atd)
+  (action (run atdgen -j -j-std %{deps})))
+
+(rule
+  (targets header_t.ml header_t.mli)
+  (deps header.atd)
+  (action (run atdgen -t %{deps})))

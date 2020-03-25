@@ -38,3 +38,5 @@ end
 
 val test_check : string -> int -> int array -> unit
 val sample : unit -> unit
+
+val read_header : Stream.reader -> string
