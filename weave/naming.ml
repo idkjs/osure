@@ -52,4 +52,4 @@ let simple_naming ~path ~base ~ext ~compress =
 let trial () =
   let sn = simple_naming ~path:"." ~base:"haha" ~ext:"dat" ~compress:true in
   let f1 = sn#new_temp true in
-  printf "name: %s\n" f1#to_name
+  printf "name: %s\n" f1#name

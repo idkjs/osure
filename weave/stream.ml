@@ -11,12 +11,12 @@ module IC = Stdio.In_channel
 type writer = <
   write_lines : string list -> unit;
   close : unit;
-  to_name : string >
+  name : string >
 
 type reader = <
   read_line : string option;
   close : unit;
-  to_name : string >
+  name : string >
 
 (* Open a new file.  Note that we fail if the destination exists. *)
 let create_out name =
@@ -24,7 +24,7 @@ let create_out name =
   object
     method write_lines lines = OC.output_lines fd lines
     method close = OC.close fd
-    method to_name = OC.close fd; name
+    method name = name
   end
 
 (* Open a file for input. *)
@@ -33,7 +33,7 @@ let open_in name =
   object
     method read_line = IC.input_line fd
     method close = IC.close fd
-    method to_name = IC.close fd; name
+    method name = name
   end
 
 (*
@@ -174,7 +174,7 @@ let gzip_out name =
           | _ -> failwith "Unexpected return" in
       loop ();
       OC.close fd
-    method to_name = failwith "to_name unsupported with zlib"
+    method name = failwith "to_name unsupported with zlib"
   end
 ;;
 
@@ -285,7 +285,7 @@ let gzip_in name =
   object
     method read_line = run_line ()
     method close = IC.close fd
-    method to_name = failwith "to_name unsupported with zlib"
+    method name = failwith "to_name unsupported with zlib"
   end
 
 let with_gen opener ~f path =

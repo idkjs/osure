@@ -3,12 +3,12 @@
 type writer = <
   write_lines : string list -> unit;
   close : unit;
-  to_name : string >
+  name : string >
 
 type reader = <
   read_line : string option;
   close : unit;
-  to_name : string >
+  name : string >
 
 val create_out : string -> writer
 val open_in : string -> reader
