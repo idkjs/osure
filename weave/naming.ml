@@ -45,7 +45,7 @@ let simple_naming ~path ~base ~ext ~compress =
 
   (* Construct a new output file. *)
   let temp_file this_compress =
-    let make = if this_compress then Stream.create_out else Stream.gzip_out in
+    let make = if this_compress then Stream.gzip_out else Stream.create_out in
     let rec loop n =
       let name = make_name (Int.to_string n) this_compress in
       let fd = try Some (make name) with
