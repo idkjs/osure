@@ -1,7 +1,6 @@
 (* SCCS based testing. *)
 
 open Core
-module RS = Random.State
 
 let sccs_check () =
   try
@@ -10,88 +9,59 @@ let sccs_check () =
   with
     | Failure _ -> false
 
-let nums_size = 1_000
-let num_versions = 100
+let simple_writer ofd : Weave.Stream.writer =
+  object
+    method write_lines lines = Out_channel.output_lines ofd lines
+    method close = ()
+    method name = failwith "No name support in test"
+  end
 
-type sccs = {
-  tdir : string;
-  plain : string;
-  sfile : string;
-  mutable nums : int array list;
-  rng : RS.t
-}
+module Sccs_store : Delta.STORE = struct
+  type t = {
+    tdir : string;
+    plain : string;
+    sfile : string;
+    mutable delta : int;
+  }
 
-let make_sccs () =
-  let tdir = Filename.temp_dir ~in_dir:"/var/tmp" "weave" "" in
-  let plain = tdir ^/ "tfile.dat" in
-  let sfile = tdir ^/ "s.tfile.dat" in
-  let nums = [Array.init nums_size ~f:(fun x -> x + 1)] in
-  let rng = RS.make [|1;2;3|] in
-  { tdir; plain; sfile; nums; rng }
+  let make tdir = {
+    tdir;
+    plain = tdir ^/ "tfile.dat";
+    sfile = tdir ^/ "s.tfile.dat";
+    delta = 0 }
 
-let with_sccs ~f =
-  let s = make_sccs () in
-  let ex = try Ok (f s) with
-    | ex -> Error ex in
-  if Option.is_none (Sys.getenv "WEAVE_KEEP") then
-    FileUtil.rm ~recurse:true [s.tdir];
-  match ex with
-    | Ok result -> result
-    | Error ex -> raise ex
+  let next_delta s =
+    let delta = s.delta + 1 in
+    s.delta <- delta;
+    delta
 
-(* Write the contents of the nums to the tfile. *)
-let write_tfile s =
-  Out_channel.with_file s.plain ~f:(fun ofd ->
-    Array.iter (List.hd_exn s.nums) ~f:(fun num -> fprintf ofd "%d\n" num))
+  let add_initial s ~f =
+    Out_channel.with_file s.plain ~f:(fun ofd ->
+      let wr = simple_writer ofd in
+      f wr);
+    Shell.run ~working_dir:s.tdir ~echo:false "sccs" ["admin"; "-itfile.dat"; "-n"; "s.tfile.dat"];
+    Unix.unlink s.plain;
+    next_delta s
 
-let dup_nums s =
-  s.nums <- Array.copy (List.hd_exn s.nums) :: s.nums
+  (* TODO: factor this and the above. *)
+  let add_delta s ~f =
+    Shell.run ~working_dir:s.tdir ~echo:false "sccs" ["get"; "-e"; "s.tfile.dat"];
+    Out_channel.with_file s.plain ~f:(fun ofd ->
+      let wr = simple_writer ofd in
+      f wr);
+    Shell.run ~working_dir:s.tdir ~echo:false "sccs" ["delta"; "-yMessage"; "s.tfile.dat"];
+    next_delta s
 
-(* A simple pseudorandom shuffle of the numbers. *)
-let shuffle s =
-  dup_nums s;
-  let top = List.hd_exn s.nums in
-  let len = Array.length top in
-  let a = RS.int s.rng len in
-  let b = RS.int s.rng len in
-  let a, b = if a > b then b, a else a, b in
-  let rec loop a b =
-    if a < b then begin
-      Array.swap top a b;
-      loop (a+1) (b-1)
-    end in loop a b
+  (* Read a delta.  This uses the parser to test weaves reading. *)
+  let read_delta s ~delta =
+    let base = "s.tfile" in
+    let path = s.tdir in
+    let sn = Weave.Naming.simple_naming ~path ~base ~ext:"dat" ~compress:false in
+    Weave.Naming.with_main_reader sn ~f:(fun rd ->
+      Parse.Line_pusher.run rd ~delta ~ustate:[])
 
-let version1 s =
-  write_tfile s;
-  Shell.run ~working_dir:s.tdir ~echo:false "sccs" ["admin"; "-itfile.dat"; "-n"; "s.tfile.dat"];
-  Unix.unlink s.plain
+end
 
-let versionn s =
-  Shell.run ~working_dir:s.tdir ~echo:false "sccs" ["get"; "-e"; "s.tfile.dat"];
-  write_tfile s;
-  Shell.run ~working_dir:s.tdir ~echo:false "sccs" ["delta"; "-yMessage"; "s.tfile.dat"]
+module Sccs_tester = Delta.Tester (Sccs_store)
 
-(* Use the weave parser to validate the versions that we have. *)
-(* The nums are in reverse order of the versions, starting with the
- * largest number. *)
-let validate s =
-  let count = List.length s.nums in
-  List.iteri s.nums ~f:(fun i nums ->
-    let i = count - i in
-    Weave.Parse.test_check s.sfile i nums)
-
-let run_test () =
-  with_sccs ~f:(fun s ->
-    printf "tdir: %S\n" s.tdir;
-    version1 s;
-    for _ = 2 to num_versions do
-      shuffle s;
-      versionn s
-    done;
-    validate s)
-
-let _ =
-  printf "SCCS test";
-  let present = sccs_check () in
-  printf "Sccs present: %b\n" present;
-  if present then run_test ()
+let run_test () = Sccs_tester.run ()

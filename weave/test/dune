@@ -1,3 +1,3 @@
 (test
-  (name sccs)
+  (name runner)
   (libraries core shell fileutils weave))
