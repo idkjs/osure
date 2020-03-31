@@ -54,13 +54,17 @@ let add_delta ~tags (deltas : Header_t.version list) : (Header_t.header * int) =
      last + 1)
 *)
 
+(* Return the current time, formatted as an iso8601 basic time. *)
+let now () =
+  Time.to_string_iso8601_basic (Time.now ()) ~zone:(force Time.Zone.local)
+
 (** Build a new version from a non-existent weave file. *)
 (* The entire contents is written as a single insert block, for delta
  * 1, which we return. *)
 let with_first_delta ns ~tags ~f =
   let tags = Tags.to_json tags in
   let deltas : Header_t.version list = [
-    { name = "name"; number = 1; tags = tags; time = "time" } ] in
+    { name = "name"; number = 1; tags = tags; time = now () } ] in
   let header : Header_t.header = { version = 1; deltas = deltas } in
   let (tname, result) = Naming.with_new_temp ns ~compressed:true ~f:(fun wr ->
     write_header wr header;
@@ -149,7 +153,7 @@ let with_new_delta ns ~tags ~f =
 
   let (toutname, _) = Naming.with_new_temp ns ~compressed:true ~f:(fun wr ->
     write_header wr { header with deltas =
-      header.deltas @ [{ name = "name2"; number = (last + 1); time = "time2"; tags }] };
+      header.deltas @ [{ name = "name2"; number = (last + 1); time = now (); tags }] };
     let delwr = new delta_writer wr in
     Naming.with_main_reader ns ~f:(fun main_rd ->
       let dpush = Delta_pusher.make main_rd ~delta:last in
