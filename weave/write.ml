@@ -46,25 +46,29 @@ let write_header wr header =
   let htext = Header_j.string_of_header header in
   wr#write_lines [sprintf "\x01t%s" htext]
 
-(*
-let add_delta ~tags (deltas : Header_t.version list) : (Header_t.header * int) =
-  let last = latest_delta deltas in
-  ({ version = 1; deltas =
-     deltas @ [ { name = "name"; number = last + 1; tags = tags; time = "time" } ] },
-     last + 1)
-*)
-
 (* Return the current time, formatted as an iso8601 basic time. *)
 let now () =
   Time.to_string_iso8601_basic (Time.now ()) ~zone:(force Time.Zone.local)
+
+(* We expect the tags to always contain a "name" value.  Extract the
+ * 'name' value from the tags, and return the rest of the tags,
+ * already converted to json. *)
+let get_name tags =
+  let rec loop pre tags = match tags with
+    | [] -> failwith "Tags must contain a 'name' field"
+    | (("name", name)::xs) ->
+        (name, Tags.to_json (List.rev_append pre xs))
+    | (x::xs) ->
+        loop (x :: pre) xs in
+  loop [] tags
 
 (** Build a new version from a non-existent weave file. *)
 (* The entire contents is written as a single insert block, for delta
  * 1, which we return. *)
 let with_first_delta ns ~tags ~f =
-  let tags = Tags.to_json tags in
+  let name, tags = get_name tags in
   let deltas : Header_t.version list = [
-    { name = "name"; number = 1; tags = tags; time = now () } ] in
+    { name; number = 1; tags; time = now () } ] in
   let header : Header_t.header = { version = 1; deltas = deltas } in
   let (tname, result) = Naming.with_new_temp ns ~compressed:true ~f:(fun wr ->
     write_header wr header;
@@ -134,7 +138,7 @@ module DS = Delta_state
 
 (* Add a new version to the delta. *)
 let with_new_delta ns ~tags ~f =
-  let tags = Tags.to_json tags in
+  let name, tags = get_name tags in
 
   (* Call the user-code to write the contents to a temporary file. *)
   let (tname, result) = Naming.with_new_temp ns ~compressed:false ~f:(fun wr ->
@@ -153,7 +157,7 @@ let with_new_delta ns ~tags ~f =
 
   let (toutname, _) = Naming.with_new_temp ns ~compressed:true ~f:(fun wr ->
     write_header wr { header with deltas =
-      header.deltas @ [{ name = "name2"; number = (last + 1); time = now (); tags }] };
+      header.deltas @ [{ name; number = (last + 1); time = now (); tags }] };
     let delwr = new delta_writer wr in
     Naming.with_main_reader ns ~f:(fun main_rd ->
       let dpush = Delta_pusher.make main_rd ~delta:last in
