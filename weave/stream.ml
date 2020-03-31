@@ -174,7 +174,7 @@ let gzip_out name =
           | _ -> failwith "Unexpected return" in
       loop ();
       OC.close fd
-    method name = failwith "to_name unsupported with zlib"
+    method name = name
   end
 ;;
 
@@ -285,7 +285,7 @@ let gzip_in name =
   object
     method read_line = run_line ()
     method close = IC.close fd
-    method name = failwith "to_name unsupported with zlib"
+    method name = name
   end
 
 let with_gen opener ~f path =

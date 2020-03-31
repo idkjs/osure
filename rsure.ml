@@ -76,7 +76,7 @@ end
 *)
 
 (* Try reading in my largest sure file for some benchmarking ideas. *)
-let () =
+let benchy () =
   let sn = Weave.Naming.simple_naming ~path:"/home" ~base:"2sure" ~ext:"dat" ~compress:true in
   let header = Weave.Naming.with_main_reader sn ~f:Weave.Parse.read_header in
   let header = Weave.Header_j.header_of_string header in
@@ -97,3 +97,8 @@ let () =
     Out_channel.flush stdout
     *)
   )
+
+(*
+let _ =
+  Weave.Write.sample ()
+*)

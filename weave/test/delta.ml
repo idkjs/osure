@@ -82,12 +82,12 @@ module Tester (Store : STORE) = struct
     let got = Array.of_list (List.rev got) in
     if not (Array.equal Int.equal got expected) then begin
       printf "exp: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t expected);
-      printf "got: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t got);
+      printf "got: %s\n" (Sexp.to_string @@ Array.sexp_of_t Int.sexp_of_t got)
     end;
     assert (Array.equal Int.equal got expected)
 
   let validate s =
-    List.iter2_exn s.deltas s.nums ~f:(validate_one s.store)
+    List.iter2_exn (List.rev s.deltas) (List.rev s.nums) ~f:(validate_one s.store)
 
   let write_data s wr =
     let nums = List.hd_exn s.nums in

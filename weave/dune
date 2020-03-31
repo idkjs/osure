@@ -1,6 +1,6 @@
 (library
   (name weave)
-  (libraries core zlib yojson atdgen-runtime)
+  (libraries core zlib shell yojson re2 atdgen-runtime)
   (preprocess (pps ppx_deriving.show ppx_sexp_conv)))
 
 (rule
