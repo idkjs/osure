@@ -1,5 +1,5 @@
 open Core
-open Rsure
+open Osure
 
 module SureFile = struct
   type t = {

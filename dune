@@ -1,4 +1,4 @@
 (executable
- (name rsure)
- (libraries core yojson rsure weave)
+ (name osure)
+ (libraries core yojson osure weave)
  (preprocess (pps ppx_let)))
