@@ -5,7 +5,11 @@ module SureFile = struct
   type t = {
     dir : string;
     file : string;
+    store : Store.t;
   }
+  let show { dir; file; store } =
+    sprintf "{dir=%S;file=%S;store=%s}" dir file (Store.show store)
+
   let t_param =
     let open Command.Let_syntax in
     let%map_open dir = flag "--dir" ~aliases:["-d"] (optional string)
@@ -13,24 +17,25 @@ module SureFile = struct
     and file = flag "--file" ~aliases:["-f"] (optional string)
       ~doc:"Filename for surefile, defaults to 2sure.dat.gz" in
     let dir = Option.value dir ~default:"." in
-    let file = Option.value file ~default:"2sure" in
-    { dir; file }
+    let file = Option.value file ~default:"2sure.dat.gz" in
+    let store = Store.parse file in
+    { dir; file; store }
 end
 
 let list_act (sfile : SureFile.t) =
-  printf "list: dir: %s, file: %s\n" sfile.dir sfile.file
+  Store.listing sfile.store
 
 let scan_act (sfile : SureFile.t) =
-  printf "scan: dir: %s, file: %s\n" sfile.dir sfile.file
+  printf "scan: %s\n" (SureFile.show sfile)
 
 let update_act (sfile : SureFile.t) =
-  printf "update: dir: %s, file: %s\n" sfile.dir sfile.file
+  printf "update: %s\n" (SureFile.show sfile)
 
 let check_act (sfile : SureFile.t) =
-  printf "check: dir: %s, file: %s\n" sfile.dir sfile.file
+  printf "check: %s\n" (SureFile.show sfile)
 
 let signoff_act (sfile : SureFile.t) =
-  printf "signoff: dir: %s, file: %s\n" sfile.dir sfile.file
+  printf "signoff: %s\n" (SureFile.show sfile)
 
 let general act summary =
   Command.basic ~summary

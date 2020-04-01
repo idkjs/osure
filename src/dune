@@ -1,3 +1,3 @@
 (library
   (name osure)
-  (libraries core))
+  (libraries core weave))
