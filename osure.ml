@@ -41,7 +41,7 @@ let general act summary =
   Command.basic ~summary
     begin
       let open Command.Let_syntax in
-      let %map_open sfile = SureFile.t_param in
+      let%map_open sfile = SureFile.t_param in
       fun () -> act sfile
     end
 
