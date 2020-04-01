@@ -1,0 +1,3 @@
+(test
+  (name runner)
+  (libraries core osure))
