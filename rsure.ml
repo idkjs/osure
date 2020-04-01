@@ -1,6 +1,56 @@
 open Core
 open Rsure
 
+module SureFile = struct
+  type t = {
+    dir : string;
+    file : string;
+  }
+  let t_param =
+    let open Command.Let_syntax in
+    let%map_open dir = flag "--dir" ~aliases:["-d"] (optional string)
+      ~doc:"Directory to scan, defaults to \".\""
+    and file = flag "--file" ~aliases:["-f"] (optional string)
+      ~doc:"Filename for surefile, defaults to 2sure.dat.gz" in
+    let dir = Option.value dir ~default:"." in
+    let file = Option.value file ~default:"2sure" in
+    { dir; file }
+end
+
+let list_act (sfile : SureFile.t) =
+  printf "list: dir: %s, file: %s\n" sfile.dir sfile.file
+
+let scan_act (sfile : SureFile.t) =
+  printf "scan: dir: %s, file: %s\n" sfile.dir sfile.file
+
+let update_act (sfile : SureFile.t) =
+  printf "update: dir: %s, file: %s\n" sfile.dir sfile.file
+
+let check_act (sfile : SureFile.t) =
+  printf "check: dir: %s, file: %s\n" sfile.dir sfile.file
+
+let signoff_act (sfile : SureFile.t) =
+  printf "signoff: dir: %s, file: %s\n" sfile.dir sfile.file
+
+let general act summary =
+  Command.basic ~summary
+    begin
+      let open Command.Let_syntax in
+      let %map_open sfile = SureFile.t_param in
+      fun () -> act sfile
+    end
+
+let () =
+  (* let open Command.Let_syntax in *)
+  Command.group
+    ~summary:"Rsure"
+    [("scan", general scan_act "Scan a directory for the first time");
+      ("update", general update_act "Update the scan using the dat file");
+      ("list", general list_act "List revisions in a given sure store");
+      ("check", general check_act "Compare the directory with the dat file");
+      ("signoff", general signoff_act "Compare the last two version in dat file") ]
+  |> Command.run
+
 let nothing () =
   Sequence.iter (Walk.walk ".") ~f:(fun e ->
     print_endline @@ Node.show e)
