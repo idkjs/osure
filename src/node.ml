@@ -2,6 +2,8 @@
 
 open Core
 
+open Escape
+
 type atts = (string, string, String.comparator_witness) Map.t
 
 type t =
@@ -13,12 +15,12 @@ type t =
 let build kind name atts =
   let buf = Buffer.create 32 in
   Buffer.add_char buf kind;
-  Buffer.add_string buf name; (* TODO: Escape *)
+  Buffer.add_string buf (escape name);
   Buffer.add_string buf " [";
   Map.iteri atts ~f:(fun ~key ~data ->
     Buffer.add_string buf key;
     Buffer.add_char buf ' ';
-    Buffer.add_string buf data; (* TODO: Escape *)
+    Buffer.add_string buf (escape data);
     Buffer.add_char buf ' ');
   Buffer.add_char buf ']';
   Buffer.contents buf
