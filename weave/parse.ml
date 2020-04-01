@@ -158,6 +158,32 @@ module Pusher (S : Sink) = struct
     ustate'
 end
 
+module Puller = struct
+  type state = State.t
+
+  let make rd ~delta = init rd delta
+
+  (* A pull parser that only pulls the plain text lines of a given
+   * revision. *)
+  let pull_plain stref =
+    let rec loop (st : State.t) =
+      let line = next_line st.rd in
+      let st = update st line in
+      match line with
+        | Done -> None
+        | Plain text ->
+            if st.keep then begin
+              let st = { st with lineno = succ st.lineno } in
+              stref := st;
+              Some text
+            end else
+              loop st
+        | _ ->
+            loop st
+    in
+    loop !stref
+end
+
 let sample () =
   let sn = Naming.simple_naming ~path:"/" ~base:"2sure" ~ext:"dat" ~compress:true in
   let rd = Naming.main_reader sn in

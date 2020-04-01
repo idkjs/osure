@@ -14,7 +14,7 @@ module Line_pusher = Weave.Parse.Pusher (Line_sink)
 
 (* Store that manages a weave *)
 
-module Delta_store : Delta.STORE = struct
+module Delta_store = struct
   type t = {
     ns : Weave.Naming.t;
     mutable index : int;
@@ -44,4 +44,24 @@ end
 
 module Delta_tester = Delta.Tester (Delta_store)
 
-let run_test () = Delta_tester.run ()
+(* Another variant that is like the above, but uses the plaintext pull
+ * parser. *)
+module Pull_store : Delta.STORE = struct
+  include Delta_store
+
+  let read_delta t ~delta =
+    Weave.Naming.with_main_reader t.Delta_store.ns ~f:(fun rd ->
+      let st = ref (Weave.Parse.Puller.make rd ~delta) in
+      let rec loop lines =
+        match Weave.Parse.Puller.pull_plain st with
+          | None -> lines
+          | Some line ->
+              loop (line :: lines) in
+      loop [])
+end
+
+module Pull_tester = Delta.Tester (Pull_store)
+
+let run_test () =
+  Delta_tester.run ();
+  Pull_tester.run ()

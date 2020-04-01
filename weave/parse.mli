@@ -36,6 +36,16 @@ module Pusher (S : Sink) : sig
    * of the parser, and the updated value of the user state. *)
 end
 
+module Puller : sig
+  type state
+
+  val make : Stream.reader -> delta:int -> state
+
+  val pull_plain : state ref -> string option
+  (** Run a single step of a pull parser, returning the next line of
+   * input, or None when there is no more input. *)
+end
+
 val test_check : string -> int -> int array -> unit
 val sample : unit -> unit
 
