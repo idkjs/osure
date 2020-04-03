@@ -6,11 +6,14 @@ open Escape
 
 type atts = (string, string, String.comparator_witness) Map.t
 
+let equal_atts ats = Map.equal (String.equal) ats
+
 type t =
   | Enter of string * atts
   | File of string * atts
   | Sep
   | Leave
+  [@@deriving eq]
 
 let build kind name atts =
   let buf = Buffer.create 32 in
@@ -30,6 +33,60 @@ let show = function
   | File (name, atts) -> build 'f' name atts
   | Leave -> "u"
   | Sep -> "-"
+
+let decoder line =
+  let len = String.length line in
+
+  (* Get a substring, up until the next space, skipping the space. *)
+  let tospace pos =
+    let rec loop p2 =
+      if p2 >= len then failwith "Unexpected end of string";
+      if Char.(line.[p2] = ' ') then
+        (String.sub line ~pos ~len:(p2 - pos), p2 + 1)
+      else
+        loop (p2 + 1)
+    in loop pos
+  in
+
+  (* Expect a specific character. *)
+  let must pos ch =
+    if pos >= len then failwith "Unexpected end of string";
+    if Char.(line.[pos] <> ch) then failwith "Unexpected character";
+    pos + 1 in
+
+  (* Are we looking at a specific character? *)
+  let isat pos ch =
+    if pos >= len then failwith "Unexpected end of string";
+    Char.(line.[pos] = ch) in
+
+  let atend pos =
+    if pos <> len then failwith "Unexpected text at end of string" in
+
+  (* Start by fetching the name. *)
+  let pos = 1 in
+  let name, pos = tospace pos in
+  let pos = must pos '[' in
+  let rec loop atts pos =
+    if isat pos ']' then begin
+      atend (pos + 1);
+      atts
+    end else begin
+      let key, pos = tospace pos in
+      let data, pos = tospace pos in
+      loop (Map.add_exn atts ~key ~data:(Escape.unescape data)) pos
+    end in
+  let atts = loop (Map.empty (module String)) pos in
+  (Escape.unescape name, atts)
+
+let parse text =
+  let len = String.length text in
+  if len = 0 then failwith "Invalid blank line";
+  match len, text.[0] with
+    | 1, '-' -> Sep
+    | 1, 'u' -> Leave
+    | _, 'f' -> let name, atts = decoder text in File (name, atts)
+    | _, 'd' -> let name, atts = decoder text in Enter (name, atts)
+    | _, _ -> failwith "Invalid input line"
 
 (* Attribute conversions to strings. *)
 let of_int = Int.to_string

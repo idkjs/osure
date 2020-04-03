@@ -44,4 +44,6 @@ let () =
   printf "Testing escape\n";
   test_escape ();
   printf "Testing escape bad hex\n";
-  test_bad_hex ()
+  test_bad_hex ();
+  printf "Testing nodes\n";
+  Nodes.run_test ()
