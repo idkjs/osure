@@ -35,7 +35,10 @@ let check_act (sfile : SureFile.t) =
   printf "check: %s\n" (SureFile.show sfile)
 
 let signoff_act (sfile : SureFile.t) =
-  printf "signoff: %s\n" (SureFile.show sfile)
+  printf "signoff: %s\n" (SureFile.show sfile);
+  Store.with_rev sfile.store `Previous ~f:(fun prior ->
+    Store.with_rev sfile.store `Latest ~f:(fun current ->
+      Compare.compare prior current))
 
 let general act summary =
   Command.basic ~summary

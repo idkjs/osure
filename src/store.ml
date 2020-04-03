@@ -8,10 +8,13 @@ type t = {
 
 let show st = sprintf "{ns=%S}" st.ns#main_file
 
-let listing st =
+let read_header st =
   let header = Weave.Naming.with_main_reader st.ns ~f:(fun rd ->
     Weave.Parse.read_header rd) in
-  let header = Weave.Header_j.header_of_string header in
+  Weave.Header_j.header_of_string header
+
+let listing st =
+  let header = read_header st in
   printf "vers | Time captured                  | name\n";
   printf "-----+--------------------------------+---------------------\n";
   List.iter header.deltas ~f:(fun ver ->
@@ -25,3 +28,32 @@ let parse file =
   let base = String.drop_suffix file 7 in
   let ns = Weave.Naming.simple_naming ~path:dir ~base ~ext:"dat" ~compress:true in
   { ns }
+
+type revision =
+  [ `Latest
+  | `Previous
+  | `Num of int ]
+
+let get_rev st rev =
+  let header = read_header st in
+  let deltas = List.rev header.deltas in
+  match rev with
+    | `Latest -> List.nth deltas 0
+    | `Previous -> List.nth deltas 1
+    | `Num n -> List.find ~f:(fun x -> x.number = n) deltas
+
+let must state expect =
+  match Weave.Parse.Puller.pull_plain state with
+    | None -> failwith "Unexpected end of input"
+    | Some text when String.(text = expect) -> ()
+    | Some text -> failwith (sprintf "Unexpected line: %S" text)
+
+let with_rev st rev ~f =
+  let rev = get_rev st rev in
+  let rev = Option.value_exn rev in
+  let delta = rev.number in
+  Weave.Naming.with_main_reader st.ns ~f:(fun rd ->
+    let state = ref (Weave.Parse.Puller.make rd ~delta) in
+    must state "asure-2.0";
+    must state "-----";
+    f (fun () -> Option.map (Weave.Parse.Puller.pull_plain state) ~f:Node.parse))

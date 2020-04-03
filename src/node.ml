@@ -86,7 +86,9 @@ let parse text =
     | 1, 'u' -> Leave
     | _, 'f' -> let name, atts = decoder text in File (name, atts)
     | _, 'd' -> let name, atts = decoder text in Enter (name, atts)
-    | _, _ -> failwith "Invalid input line"
+    | _, _ ->
+        eprintf "line: %S\n" text;
+        failwith "Invalid input line"
 
 (* Attribute conversions to strings. *)
 let of_int = Int.to_string
