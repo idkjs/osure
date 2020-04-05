@@ -65,7 +65,47 @@ end
 
 open Internal
 
-let hash_update path db prior =
+module HashState = struct
+  type t = {
+    mutable files : int64;
+    mutable tfiles : int64;
+    mutable octets : int64;
+    mutable toctets : int64;
+    meter : Progress.t;
+  }
+  let show t = sprintf "%Ld files, %Ld bytes" t.tfiles t.toctets
+end
+
+let node_size = function
+  | Node.File (_, atts) ->
+      begin match Map.find atts "size" with
+        | None -> 0L
+        | Some text -> Int64.of_string text
+      end
+  | _ -> 0L
+
+let hash_count ~meter prior =
+  let state = { HashState.files = 0L; tfiles = 0L;
+    octets = 0L; toctets = 0L; meter } in
+  Sequence.iter (to_seq prior) ~f:(fun node ->
+    if needs_hash node then begin
+      state.tfiles <- Int64.succ state.tfiles;
+      state.toctets <- Int64.(+) state.toctets (node_size node)
+    end);
+  state
+
+let update_meter (hstate : HashState.t) node =
+  hstate.files <- Int64.succ hstate.files;
+  hstate.octets <- Int64.(+) hstate.octets (node_size node);
+  Progress.update hstate.meter ~f:(fun () ->
+    sprintf "  %6Ld/%6Ld (%5.1f%%) files, %s/%s (%5.1f%%) bytes"
+      hstate.files hstate.tfiles
+      Float.(Int64.to_float hstate.files * 100.0 / Int64.to_float hstate.tfiles)
+      (Progress.humanize_size hstate.octets)
+      (Progress.humanize_size hstate.toctets)
+      Float.(Int64.to_float hstate.octets * 100.0 / Int64.to_float hstate.toctets))
+
+let hash_update ~hstate path db prior =
   printf "hash update\n";
   let nodes = to_seq prior in
   let nodes = track_path path nodes in
@@ -81,6 +121,8 @@ let hash_update path db prior =
               None
         in
         (*printf "  %s\n" hash;*)
+
+        update_meter hstate node;
 
         Option.iter hash ~f:(fun hash ->
           Sqlite3.bind_int stmt 1 index |> Sqlite3.Rc.check;

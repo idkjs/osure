@@ -11,14 +11,8 @@ val with_meter : f:(t -> 'a) -> 'a
 (** Insert a meter to show 'scan' progress. *)
 val scan_meter : t -> Node.t Sequence.t -> Node.t Sequence.t
 
-(*
+(** Update what would be shown on the meter. *)
+val update : t -> f:(unit -> string) -> unit
 
-(** Set the function used to print the meter. *)
-val set_meter : t -> f:(unit -> string) -> unit
-
-(** Indicate to the meter that it might make sense to update. *)
-val update : t -> unit
-
-(** Print a message independent of the current meter. *)
-val printf : ('a, Out_channel.t, unit) Stdlib.format -> 'a
-*)
+(** Convert a file size to a readable summary form. *)
+val humanize_size : int64 -> string

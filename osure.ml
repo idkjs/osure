@@ -36,8 +36,12 @@ let scan_act (sfile : SureFile.t) =
         Sequence.iter elts ~f:(fun elt -> wnode elt))) in
     (* printf "tempy name: %s\n" tname; *)
     printf "Updating hashes\n%!";
-    Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
-      Scan.hash_update sfile.dir db rnode);
+    Progress.with_meter ~f:(fun meter ->
+      let hstate = Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
+        Scan.hash_count ~meter rnode) in
+      Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
+        Scan.hash_update ~hstate sfile.dir db rnode)
+      );
 
     (* Retrieve the hashes. *)
     let _, delta = Store.with_first_delta sfile.store ~f:(fun wnode ->
