@@ -1,4 +1,8 @@
 (library
   (name osure)
   (libraries core weave)
-  (preprocess (pps ppx_deriving.eq)))
+  (preprocess (pps ppx_deriving.eq))
+  (foreign_stubs
+    (language c)
+    (names sha1_stubs))
+  (c_library_flags -lcrypto))
