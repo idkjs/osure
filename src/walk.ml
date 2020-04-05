@@ -31,7 +31,7 @@ let walk path =
   let rec walk path name stat =
     (* printf "Walk: %s\n" path; *)
     let dirs, files = scan_dir path in
-    yield @@ Node.Enter (name, Node.stat_to_atts path stat) >>= fun () ->
+    yield @@ Node.Enter (name, Node.stat_to_atts (path ^/ name) stat) >>= fun () ->
     subdirs path dirs >>= fun () ->
     yield Node.Sep >>= fun () ->
     subfiles path files >>= fun () ->
@@ -44,7 +44,7 @@ let walk path =
   and subfiles path = function
     | [] -> return ()
     | ((name, stat) :: xs) ->
-        yield @@ Node.File (name, Node.stat_to_atts path stat) >>= fun () ->
+        yield @@ Node.File (name, Node.stat_to_atts (path ^/ name) stat) >>= fun () ->
         subfiles path xs
   in
   run @@ walk path "__root__" root_stat

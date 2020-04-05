@@ -130,9 +130,11 @@ let stat_to_atts path (stat : Unix.stats) =
         time_info atts stat
     | Unix.S_LNK ->
         let atts = Map.add_exn atts ~key:"kind" ~data:"lnk" in
-        let targ = try
-          Unix.readlink path
-        with Unix.Unix_error _ -> "???" in
+        let targ = try Unix.readlink path
+        with Unix.Unix_error _ ->
+          printf "Warning: Unable to readlink %S\n" path;
+          "???"
+        in
         let atts = Map.add_exn atts ~key:"targ" ~data:targ in
         atts
     | Unix.S_FIFO -> Map.add_exn atts ~key:"kind" ~data:"fifo"
