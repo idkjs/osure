@@ -26,12 +26,16 @@ let list_act (sfile : SureFile.t) =
   Store.listing sfile.store
 
 let scan_act (sfile : SureFile.t) =
-  printf "scan: %s\n" (SureFile.show sfile);
+  printf "scan: %s\n%!" (SureFile.show sfile);
   let dbname, _ = Store.with_temp_db sfile.store ~f:(fun db ->
     Db.make_hash_schema db;
     let tname, _ = Store.with_temp sfile.store ~f:(fun wnode ->
-      Sequence.iter (Walk.walk sfile.dir) ~f:(fun elt -> wnode elt)) in
+      Progress.with_meter ~f:(fun meter ->
+        let elts = Walk.walk sfile.dir in
+        let elts = Progress.scan_meter meter elts in
+        Sequence.iter elts ~f:(fun elt -> wnode elt))) in
     (* printf "tempy name: %s\n" tname; *)
+    printf "Updating hashes\n%!";
     Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
       Scan.hash_update sfile.dir db rnode);
 
