@@ -48,6 +48,12 @@ let must state expect =
     | Some text when String.(text = expect) -> ()
     | Some text -> failwith (sprintf "Unexpected line: %S" text)
 
+let rd_must rd expect =
+  match rd#read_line with
+    | None -> failwith "Unexpected end of input"
+    | Some text when String.(text = expect) -> ()
+    | Some text -> failwith (sprintf "Unexpected line: %S" text)
+
 let with_rev st rev ~f =
   let rev = get_rev st rev in
   let rev = Option.value_exn rev in
@@ -57,3 +63,34 @@ let with_rev st rev ~f =
     must state "asure-2.0";
     must state "-----";
     f (fun () -> Option.map (Weave.Parse.Puller.pull_plain state) ~f:Node.parse))
+
+let with_temp st ~f =
+  Weave.Naming.with_new_temp st.ns ~compressed:false ~f:(fun wr ->
+    wr#write_lines ["asure-2.0"; "-----"];
+    f (fun node -> wr#write_lines [Node.show node]))
+
+let with_temp_in fname ~gzip ~f =
+  Weave.Stream.with_in fname ~gzip ~f:(fun rd ->
+    rd_must rd "asure-2.0";
+    rd_must rd "-----";
+    f (fun () -> Option.map rd#read_line ~f:Node.parse))
+
+let with_temp_db st ~f =
+  Weave.Naming.with_new_temp st.ns ~compressed:false ~f:(fun wr ->
+    wr#close;
+    let name = wr#name in
+    let db = Sqlite3.db_open ~mutex:`FULL name in
+    let result = try Ok (f db) with
+      | ex -> Error ex in
+    let _ = Sqlite3.db_close db in (* TODO warn if can't close *)
+    match result with
+      | Ok result -> result
+      | Error ex -> raise ex)
+
+(* Make testing tags.  TODO: These need to come from the caller. *)
+let make_tags _st = []
+
+let with_first_delta st ~f =
+  Weave.Write.with_first_delta st.ns ~tags:(make_tags st) ~f:(fun wr ->
+    wr#write_lines ["asure-2.0"; "-----"];
+    f (fun node -> wr#write_lines [Node.show node]))

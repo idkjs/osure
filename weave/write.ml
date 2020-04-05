@@ -52,10 +52,13 @@ let now () =
 
 (* We expect the tags to always contain a "name" value.  Extract the
  * 'name' value from the tags, and return the rest of the tags,
- * already converted to json. *)
+ * already converted to json.  If there is no "name" field, just use a
+ * timestamp. *)
 let get_name tags =
   let rec loop pre tags = match tags with
-    | [] -> failwith "Tags must contain a 'name' field"
+    | [] ->
+        let name = now () in
+        (name, Tags.to_json (List.rev pre))
     | (("name", name)::xs) ->
         (name, Tags.to_json (List.rev_append pre xs))
     | (x::xs) ->

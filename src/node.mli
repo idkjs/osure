@@ -3,7 +3,7 @@
 open Core
 
 (* Attributes are most simply represented as a alist. *)
-type atts = (string, string, String.comparator_witness) Map.t
+type atts = string Map.M(String).t
 
 type t =
   | Enter of string * atts

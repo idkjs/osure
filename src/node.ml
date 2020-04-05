@@ -4,7 +4,7 @@ open Core
 
 open Escape
 
-type atts = (string, string, String.comparator_witness) Map.t
+type atts = string Map.M(String).t
 
 let equal_atts ats = Map.equal (String.equal) ats
 

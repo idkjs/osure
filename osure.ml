@@ -26,7 +26,26 @@ let list_act (sfile : SureFile.t) =
   Store.listing sfile.store
 
 let scan_act (sfile : SureFile.t) =
-  printf "scan: %s\n" (SureFile.show sfile)
+  printf "scan: %s\n" (SureFile.show sfile);
+  let dbname, _ = Store.with_temp_db sfile.store ~f:(fun db ->
+    Db.make_hash_schema db;
+    let tname, _ = Store.with_temp sfile.store ~f:(fun wnode ->
+      Sequence.iter (Walk.walk sfile.dir) ~f:(fun elt -> wnode elt)) in
+    (* printf "tempy name: %s\n" tname; *)
+    Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
+      Scan.hash_update sfile.dir db rnode);
+
+    (* Retrieve the hashes. *)
+    let _, delta = Store.with_first_delta sfile.store ~f:(fun wnode ->
+      Db.with_hashes db ~f:(fun elts ->
+        Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
+          Scan.merge_hashes elts rnode wnode)))
+    in
+    Unix.unlink tname;
+    printf "new delta %d\n" delta
+    ) in
+  (* printf "db: %s\n" dbname; *)
+  Unix.unlink dbname
 
 let update_act (sfile : SureFile.t) =
   printf "update: %s\n" (SureFile.show sfile)

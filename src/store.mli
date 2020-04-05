@@ -25,3 +25,20 @@ type revision =
 (** Retrieve a revision, calling 'f' with a pull parser that returns
  * the lines of the revision. *)
 val with_rev : t -> revision -> f:((unit -> Node.t option) -> 'a) -> 'a
+
+(** Start writing nodes to a new temp file.  The function is called
+ * with a writer argument that writes these nodes to a temp file.
+ * Returns the function return value, along with the name of the temp
+ * file. *)
+val with_temp : t -> f:((Node.t -> unit) -> 'a) -> (string * 'a)
+
+(** Read in a temp file as a node reader. *)
+val with_temp_in : string -> gzip:bool -> f:((unit -> Node.t option) -> 'a) -> 'a
+
+(** Create a new temp file, and invoke 'f' with an Sqlite database
+ * handle opened on that file. *)
+val with_temp_db : t -> f:(Sqlite3.db -> 'a) -> (string * 'a)
+
+(** Call 'f' with a node writer that will make the first delta is
+ * done. *)
+val with_first_delta : t -> f:((Node.t -> unit) -> 'a) -> ('a * int)

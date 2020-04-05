@@ -1,6 +1,6 @@
 (library
   (name osure)
-  (libraries core weave)
+  (libraries core weave sqlite3)
   (preprocess (pps ppx_deriving.eq))
   (foreign_stubs
     (language c)
