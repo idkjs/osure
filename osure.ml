@@ -25,38 +25,59 @@ end
 let list_act (sfile : SureFile.t) =
   Store.listing sfile.store
 
-let scan_act (sfile : SureFile.t) =
-  printf "scan: %s\n%!" (SureFile.show sfile);
+let scan_or_update op (sfile : SureFile.t) =
   let dbname, _ = Store.with_temp_db sfile.store ~f:(fun db ->
     Db.make_hash_schema db;
-    let tname, _ = Store.with_temp sfile.store ~f:(fun wnode ->
+
+    (* Scan the filesystem (without hashes). *)
+    let scan_temp, _ = Store.with_temp sfile.store ~f:(fun wnode ->
       Progress.with_meter ~f:(fun meter ->
         let elts = Walk.walk sfile.dir in
         let elts = Progress.scan_meter meter elts in
-        Sequence.iter elts ~f:(fun elt -> wnode elt))) in
-    (* printf "tempy name: %s\n" tname; *)
-    printf "Updating hashes\n%!";
-    Progress.with_meter ~f:(fun meter ->
-      let hstate = Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
-        Scan.hash_count ~meter rnode) in
-      Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
-        Scan.hash_update ~hstate sfile.dir db rnode)
-      );
+        Sequence.iter elts ~f:(fun elt -> wnode elt))
+    ) in
 
-    (* Retrieve the hashes. *)
-    let _, delta = Store.with_first_delta sfile.store ~f:(fun wnode ->
+    (* Update the hash from the latest revision, if there is one. *)
+    let hashed_file, rdfile = match op with
+      | `Update ->
+        let hashed_file, _ = Store.with_temp sfile.store ~f:(fun whashed ->
+          Store.with_rev sfile.store `Latest ~f:(fun older ->
+            Store.with_temp_in scan_temp ~gzip:false ~f:(fun latest ->
+              Scan.cp_hashes ~older ~latest whashed
+            )
+          )
+        ) in
+        (Some hashed_file, hashed_file)
+      | `Scan -> None, scan_temp in
+
+    Progress.with_meter ~f:(fun meter ->
+      let hstate = Store.with_temp_in rdfile ~gzip:false ~f:(fun rnode ->
+        Scan.hash_count ~meter rnode) in
+      Store.with_temp_in rdfile ~gzip:false ~f:(fun rnode ->
+        Scan.hash_update ~hstate sfile.dir db rnode)
+    );
+
+    (* Retrieve the hashes *)
+    let wither = match op with
+      | `Update -> Store.with_added_delta
+      | `Scan -> Store.with_first_delta in
+    let _, delta = wither sfile.store ~f:(fun wnode ->
       Db.with_hashes db ~f:(fun elts ->
-        Store.with_temp_in tname ~gzip:false ~f:(fun rnode ->
+        Store.with_temp_in rdfile ~gzip:false ~f:(fun rnode ->
           Scan.merge_hashes elts rnode wnode)))
     in
-    Unix.unlink tname;
-    printf "new delta %d\n" delta
-    ) in
-  (* printf "db: %s\n" dbname; *)
+    printf "New delta: %d\n%!" delta;
+
+    Option.iter hashed_file ~f:Unix.unlink;
+    Unix.unlink scan_temp
+  ) in
   Unix.unlink dbname
 
+let scan_act (sfile : SureFile.t) =
+  scan_or_update `Scan sfile
+
 let update_act (sfile : SureFile.t) =
-  printf "update: %s\n" (SureFile.show sfile)
+  scan_or_update `Update sfile
 
 let check_act (sfile : SureFile.t) =
   printf "check: %s\n" (SureFile.show sfile)

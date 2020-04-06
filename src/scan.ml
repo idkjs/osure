@@ -4,11 +4,6 @@ open Core
 
 module Internal : sig
 
-  (** Turn a fetching function into a sequence.  Sequences don't require
-   * that the result be evaluated in order, so we have to put a little
-   * work into making sure this works (using memoize). *)
-  val to_seq : (unit -> 'a option) -> 'a Sequence.t
-
   (** Augment the node coming from a sure tree to track the full path. *)
   val track_path : string -> Node.t Sequence.t -> (Node.t * string) Sequence.t
 
@@ -18,11 +13,6 @@ module Internal : sig
   val needs_hash : Node.t -> bool
 
 end = struct
-
-  let to_seq f =
-    Sequence.unfold ~init:f ~f:(fun f ->
-      Option.map (f ()) ~f:(fun node -> (node, f)))
-    |> Sequence.memoize
 
   (** Reverse and combine the components into a path. *)
   let revcombine = function
@@ -64,6 +54,11 @@ end = struct
 end
 
 open Internal
+
+let to_seq f =
+  Sequence.unfold ~init:f ~f:(fun f ->
+    Option.map (f ()) ~f:(fun node -> (node, f)))
+  |> Sequence.memoize
 
 module HashState = struct
   type t = {
@@ -166,3 +161,106 @@ let merge_hashes elts rnode wnode =
         end
   in
   loop (Sequence.next elts, Sequence.next input)
+
+let must_dir = function
+  | Node.Enter (name, _) -> name
+  | _ -> failwith "Unexpected node type"
+
+let is_file atts = match Map.find atts "kind" with
+  | Some "file" -> true
+  | _ -> false
+
+(** Determine if these sets of attributes are similar enough to copy
+ * the 'sha1' from the older set to the newer. *)
+let migrate_hash older newer =
+  (* printf "older: %s\n" (Node.show (Node.File ("fake", older))); *)
+  (* printf "newer: %s\n" (Node.show (Node.File ("fake", newer))); *)
+  (* Don't do anything if a hash exists already *)
+  if Map.mem newer "sha1" then newer
+  (* Don't copy unless both are files. *)
+  else if not (is_file older && is_file newer) then newer
+  else begin
+    let attsame key =
+      match (Map.find older key, Map.find newer key) with
+        | (Some v1, Some v2) when String.(v1 = v2) -> true
+        | _ -> false
+    in
+    match Map.find older "sha1" with
+      | None -> newer
+      | Some sha1 ->
+          if attsame "ino" && attsame "ctime" then
+            Map.set newer ~key:"sha1" ~data:sha1
+          else
+            newer
+  end
+
+let cp_hashes ~older ~latest out =
+  let next gen = match gen () with
+    | Some node -> node
+    | None -> failwith "Unexpected end of tree" in
+
+  let rec children anode bnode = match (anode, bnode) with
+    | (Node.Sep, Node.Sep) ->
+        out Node.Sep;
+        files (next older) (next latest)
+    | (Enter _, Sep) ->
+        aconsume ();
+        children (next older) bnode
+    | (Sep, Enter _) ->
+        out bnode;
+        bconsume ();
+        children anode (next latest)
+    | (Enter (aname, _), Enter (bname, _)) when String.(aname < bname) ->
+        aconsume ();
+        children (next older) bnode
+    | (Enter (aname, _), Enter (bname, _)) when String.(aname > bname) ->
+        out bnode;
+        bconsume ();
+        children anode (next latest)
+    | (Enter _, Enter _) ->
+        out bnode;
+        children (next older) (next latest);
+        children (next older) (next latest);
+    | _ -> failwith "Invalid node in tree"
+  and files anode bnode = match (anode, bnode) with
+    | (Node.Leave, Node.Leave) -> out bnode
+    | (File _, Leave) ->
+        files (next older) bnode
+    | (Leave, File _) ->
+        out bnode;
+        files anode (next latest)
+    | (File (aname, _), File (bname, _)) when String.(aname < bname) ->
+        files (next older) bnode
+    | (File (aname, _), File (bname, _)) when String.(aname > bname) ->
+        out bnode;
+        files anode (next latest)
+    | (File (_, aatts), File (bname, batts)) ->
+        let batts = migrate_hash aatts batts in
+        out (File (bname, batts));
+        files (next older) (next latest)
+    | _ -> failwith "Invalid node in file part of tree"
+  and aconsume () =
+    let node = next older in
+    match node with
+      | Node.Leave -> ()
+      | Sep | File _ -> aconsume ()
+      | Enter _ -> aconsume (); aconsume ()
+  and bconsume () =
+    let node = next latest in
+    out node;
+    match node with
+      | Node.Leave -> ()
+      | Sep | File _ -> bconsume ()
+      | Enter _ -> bconsume (); bconsume ()
+  in
+
+  let a = next older in
+  let b = next latest in
+
+  out b;
+
+  let aname = must_dir a in
+  let bname = must_dir b in
+
+  if String.(aname <> bname) then failwith "Root directories have differing names";
+  children (next older) (next latest)

@@ -94,3 +94,8 @@ let with_first_delta st ~f =
   Weave.Write.with_first_delta st.ns ~tags:(make_tags st) ~f:(fun wr ->
     wr#write_lines ["asure-2.0"; "-----"];
     f (fun node -> wr#write_lines [Node.show node]))
+
+let with_added_delta st ~f =
+  Weave.Write.with_new_delta st.ns ~tags:(make_tags st) ~f:(fun wr ->
+    wr#write_lines ["asure-2.0"; "-----"];
+    f (fun node -> wr#write_lines [Node.show node]))
