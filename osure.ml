@@ -149,38 +149,6 @@ end
 module Loader = Weave.Parse.Pusher (Load_sink)
 module Counter = Weave.Parse.Pusher (Count_sink)
 
-(* TODO: Use atdgen to build real structures out of the json data.
- * For now, just use this awful parser. *)
-(*
-let assoc_get json key =
-  let rec lookup = function
-    | (k,v)::xs ->
-        if String.(=) k key then v
-        else lookup xs
-    | [] -> failwith "Key not present" in
-  match json with
-    | `Assoc xs -> lookup xs
-    | _ -> failwith "Unexpected json"
-
-module Version = struct
-  type t = {
-    name : string;
-    number : int;
-    (*tags : string list;
-    time : string*)
-  }
-
-  let from_json json =
-    let name = match assoc_get json "name" with
-      | `String text -> text
-      | _ -> failwith "Unexpected json" in
-    let number = match assoc_get json "number" with
-      | `Int num -> num
-      | _ -> failwith "Unexpected json" in
-    { name; number }
-end
-*)
-
 (* Try reading in my largest sure file for some benchmarking ideas. *)
 let benchy () =
   let sn = Weave.Naming.simple_naming ~path:"/home" ~base:"2sure" ~ext:"dat" ~compress:true in
