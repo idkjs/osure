@@ -100,35 +100,67 @@ let update_meter (hstate : HashState.t) node =
       (Progress.humanize_size hstate.toctets)
       Float.(Int64.to_float hstate.octets * 100.0 / Int64.to_float hstate.toctets))
 
-let hash_update ~hstate path db prior =
-  printf "hash update\n";
-  let nodes = to_seq prior in
-  let nodes = track_path path nodes in
-  Db.with_xact db ~f:(fun db ->
+(** A Hashing module performs updates of the hash database. *)
+module type Hasher = sig
+  type t
+  val make : hstate:HashState.t -> Sqlite3.db -> t
+  val hash_file : t -> int -> Node.t -> string -> unit
+  val finalize : t -> unit
+end
+
+(** Hashing module that computes hashes and adds them to the database,
+ * all within a single thread. *)
+module Direct_hash : Hasher = struct
+  type t = {
+    hstate : HashState.t;
+    db : Sqlite3.db;
+    stmt : Sqlite3.stmt;
+  }
+
+  let make ~hstate db =
     let stmt = Sqlite3.prepare db "INSERT INTO hashes VALUES (?, ?)" in
-    Sequence.iteri nodes ~f:(fun index (node, path) ->
-      if needs_hash node then begin
-        (*printf "Node: %s\n" (Node.show node);*)
-        (*printf "  %S\n" path;*)
-        let hash = try Some (Sha1.hash_file path) with
-          | _ex ->
-              eprintf "Warning: error hashing %S\n" path;
-              None
-        in
-        (*printf "  %s\n" hash;*)
+    { hstate; db; stmt }
 
-        update_meter hstate node;
+  let hash_file t index node path =
+    let hash = try Some (Sha1.hash_file path) with
+    | _ex ->
+        eprintf "Warning: error hashing %S\n" path;
+        None
+    in
+    update_meter t.hstate node;
 
-        Option.iter hash ~f:(fun hash ->
-          Sqlite3.bind_int stmt 1 index |> Sqlite3.Rc.check;
-          Sqlite3.bind_blob stmt 2 hash |> Sqlite3.Rc.check;
-          begin match Sqlite3.step stmt with
-            | DONE -> ()
-            | err -> failwith (Sqlite3.Rc.to_string err)
-          end;
-          Sqlite3.reset stmt |> Sqlite3.Rc.check)
-      end);
-    Sqlite3.finalize stmt |> Sqlite3.Rc.check)
+    Option.iter hash ~f:(fun hash ->
+      Sqlite3.bind_int t.stmt 1 index |> Sqlite3.Rc.check;
+      Sqlite3.bind_blob t.stmt 2 hash |> Sqlite3.Rc.check;
+      begin match Sqlite3.step t.stmt with
+      | DONE -> ()
+      | err -> failwith (Sqlite3.Rc.to_string err)
+      end;
+      Sqlite3.reset t.stmt |> Sqlite3.Rc.check
+    )
+
+  let finalize t =
+    Sqlite3.finalize t.stmt |> Sqlite3.Rc.check
+end
+
+module Hash_update (H : Hasher) = struct
+  let hash_update ~hstate path db prior =
+    printf "hash update\n";
+    let nodes = to_seq prior in
+    let nodes = track_path path nodes in
+    Db.with_xact db ~f:(fun db ->
+      let hasher = H.make ~hstate db in
+      Sequence.iteri nodes ~f:(fun index (node, path) ->
+        if needs_hash node then begin
+          (*printf "Node: %s\n" (Node.show node);*)
+          (*printf "  %S\n" path;*)
+          H.hash_file hasher index node path
+        end);
+      H.finalize hasher)
+end
+
+module Direct_update = Hash_update (Direct_hash)
+include Direct_update
 
 (** Update the hash within a node. *)
 let node_newhash node newhash =
