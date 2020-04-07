@@ -79,11 +79,25 @@ let scan_act (sfile : SureFile.t) =
 let update_act (sfile : SureFile.t) =
   scan_or_update `Update sfile
 
+let with_tdir ~f =
+  let tdir = Filename.temp_dir "osure" "" in
+  let ex = try Ok (f tdir) with
+    | ex -> Error ex in
+  if Option.is_none (Sys.getenv "OSURE_KEEP") then
+    FileUtil.rm ~recurse:true [tdir];
+  match ex with
+    | Ok result -> result
+    | Error ex -> raise ex
+
 let check_act (sfile : SureFile.t) =
-  printf "check: %s\n" (SureFile.show sfile)
+  with_tdir ~f:(fun tdir ->
+    let tstore = Store.parse (tdir ^/ "2sure.dat.gz") in
+    scan_or_update `Scan { sfile with store = tstore };
+    Store.with_rev sfile.store `Latest ~f:(fun prior ->
+      Store.with_rev tstore `Latest ~f:(fun current ->
+        Compare.compare prior current)))
 
 let signoff_act (sfile : SureFile.t) =
-  printf "signoff: %s\n" (SureFile.show sfile);
   Store.with_rev sfile.store `Previous ~f:(fun prior ->
     Store.with_rev sfile.store `Latest ~f:(fun current ->
       Compare.compare prior current))
