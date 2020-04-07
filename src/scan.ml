@@ -143,6 +143,90 @@ module Direct_hash : Hasher = struct
     Sqlite3.finalize t.stmt |> Sqlite3.Rc.check
 end
 
+module Threaded_hash : Hasher = struct
+
+  (* Number of cpus.  This should actually get from the system. *)
+  let ncpu = 4
+
+  let nworkers = ncpu
+
+  (* We create n+1 threads, where the n threads run hash_worker, and
+   * the remaining thread runs hash_collector. *)
+
+  type t = {
+    (* The work queue.  The main thread will write to this, and the
+     * workers will pull from it.  When the main thread is done, it
+     * will push a None for each worker to indicate they should
+     * finish. *)
+    work : (int * Node.t * string) option Channel.t;
+
+    (* The workers push their state to the finish queue as they hash.
+     * Each worker will also push a None to indicate they are finished
+     * with all of their work. *)
+    finish : (int * Node.t * string) option Channel.t;
+
+    (* The threads. *)
+    collector : Thread.t;
+  }
+
+  let hash_collector finish ~hstate db =
+    let stmt = Sqlite3.prepare db "INSERT INTO hashes VALUES (?, ?)" in
+    let rec loop workers =
+      if workers = 0 then ()
+      else match Channel.pop finish with
+        | None -> loop (workers-1)
+        | Some (index, node, hash) ->
+            update_meter hstate node;
+            Sqlite3.bind_int stmt 1 index |> Sqlite3.Rc.check;
+            Sqlite3.bind_blob stmt 2 hash |> Sqlite3.Rc.check;
+            begin match Sqlite3.step stmt with
+              | DONE -> ()
+              | err -> failwith (Sqlite3.Rc.to_string err)
+            end;
+            Sqlite3.reset stmt |> Sqlite3.Rc.check;
+            loop workers
+    in loop nworkers
+
+  let rec hash_worker t =
+    match Channel.pop t.work with
+      | None ->
+          Channel.push t.finish None
+      | Some (index, node, path) ->
+          let hash = try Some (Sha1.hash_file path) with
+            | _ex ->
+                eprintf "Warning: error hashing %S\n%!" path;
+                None
+          in
+          Option.iter hash ~f:(fun hash ->
+            Channel.push t.finish (Some (index, node, hash)));
+          hash_worker t
+
+  let make ~hstate db =
+    let finish = Channel.create ~bound:(2 * ncpu) in
+    let collector = Thread.create (hash_collector finish ~hstate) db in
+    let t = {
+      work = Channel.create ~bound:(2 * ncpu);
+      finish;
+      collector } in
+    for _ = 1 to nworkers do
+      let _ = Thread.create hash_worker t in
+      ()
+    done;
+    t
+
+  let hash_file t index node path =
+    Channel.push t.work (Some (index, node, path))
+
+  let finalize t =
+    (* Tell all of the workers we are done. *)
+    for _ = 1 to nworkers do
+      Channel.push t.work None
+    done;
+
+    (* Wait for the collector to finish. *)
+    Thread.join t.collector
+end
+
 module Hash_update (H : Hasher) = struct
   let hash_update ~hstate path db prior =
     printf "hash update\n";
@@ -159,8 +243,8 @@ module Hash_update (H : Hasher) = struct
       H.finalize hasher)
 end
 
-module Direct_update = Hash_update (Direct_hash)
-include Direct_update
+(* include Hash_update (Direct_hash) *)
+include (Hash_update (Threaded_hash))
 
 (** Update the hash within a node. *)
 let node_newhash node newhash =
