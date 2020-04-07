@@ -185,7 +185,8 @@ module Threaded_hash : Hasher = struct
             end;
             Sqlite3.reset stmt |> Sqlite3.Rc.check;
             loop workers
-    in loop nworkers
+    in loop nworkers;
+    Sqlite3.finalize stmt |> Sqlite3.Rc.check
 
   let rec hash_worker t =
     match Channel.pop t.work with
