@@ -94,10 +94,10 @@ let compare agen bgen =
         print_alone '+' "file" (dir ^/ bname);
         files dir (Leave, next bgen)
     | (File (aname, _), (File (bname, _) as bb)) when String.(aname < bname) ->
-        print_alone '-' "file" (dir ^/ bname);
+        print_alone '-' "file" (dir ^/ aname);
         files dir (next agen, bb)
     | (File (aname, _) as aa, File (bname, _)) when String.(aname > bname) ->
-        print_alone '+' "file" (dir ^/ aname);
+        print_alone '+' "file" (dir ^/ bname);
         files dir (aa, next bgen)
     | (File (aname, aatts), File (_, batts)) ->
         attcmp aatts batts (dir ^/ aname);
