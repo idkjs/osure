@@ -87,15 +87,12 @@ let with_temp_db st ~f =
       | Ok result -> result
       | Error ex -> raise ex)
 
-(* Make testing tags.  TODO: These need to come from the caller. *)
-let make_tags _st = []
-
-let with_first_delta st ~f =
-  Weave.Write.with_first_delta st.ns ~tags:(make_tags st) ~f:(fun wr ->
+let with_first_delta ?(tags=[]) st ~f =
+  Weave.Write.with_first_delta st.ns ~tags ~f:(fun wr ->
     wr#write_lines ["asure-2.0"; "-----"];
     f (fun node -> wr#write_lines [Node.show node]))
 
-let with_added_delta st ~f =
-  Weave.Write.with_new_delta st.ns ~tags:(make_tags st) ~f:(fun wr ->
+let with_added_delta ?(tags=[]) st ~f =
+  Weave.Write.with_new_delta st.ns ~tags ~f:(fun wr ->
     wr#write_lines ["asure-2.0"; "-----"];
     f (fun node -> wr#write_lines [Node.show node]))

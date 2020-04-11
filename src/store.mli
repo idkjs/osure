@@ -41,7 +41,7 @@ val with_temp_db : t -> f:(Sqlite3.db -> 'a) -> (string * 'a)
 
 (** Call 'f' with a node writer that will make the first delta is
  * done. *)
-val with_first_delta : t -> f:((Node.t -> unit) -> 'a) -> ('a * int)
+val with_first_delta : ?tags:Weave.Tags.t -> t -> f:((Node.t -> unit) -> 'a) -> ('a * int)
 
 (** Call 'f' with a node writer that will make a new delta. *)
-val with_added_delta : t -> f:((Node.t -> unit) -> 'a) -> ('a * int)
+val with_added_delta : ?tags:Weave.Tags.t -> t -> f:((Node.t -> unit) -> 'a) -> ('a * int)
