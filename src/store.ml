@@ -15,10 +15,10 @@ let read_header st =
 
 let listing st =
   let header = read_header st in
-  printf "vers | Time captured                  | name\n";
-  printf "-----+--------------------------------+---------------------\n";
+  printf "vers | Time captured                    | name\n";
+  printf "-----+----------------------------------+---------------------\n";
   List.iter header.deltas ~f:(fun ver ->
-    printf "% 4d | %s | %s\n" ver.number ver.time ver.name)
+    printf "% 4d | %-32s | %s\n" ver.number ver.time ver.name)
 
 let parse file =
   let dir, file = Filename.split file in
