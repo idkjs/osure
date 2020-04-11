@@ -23,3 +23,7 @@ let from_json items =
   List.map items ~f:(function
     | (k, `String v) -> (k, v)
     | _ -> failwith "Invalid Json for tags")
+
+let from_equal text = match String.split ~on:'=' text with
+  | (key::datas) -> (key, String.concat ~sep:"=" datas)
+  | _ -> failwith "Expecting tag as key=value"

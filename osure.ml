@@ -25,7 +25,7 @@ end
 let list_act (sfile : SureFile.t) =
   Store.listing sfile.store
 
-let scan_or_update op (sfile : SureFile.t) =
+let scan_or_update op (sfile : SureFile.t) tags =
   let dbname, _ = Store.with_temp_db sfile.store ~f:(fun db ->
     Db.make_hash_schema db;
 
@@ -61,7 +61,7 @@ let scan_or_update op (sfile : SureFile.t) =
     let wither = match op with
       | `Update -> Store.with_added_delta
       | `Scan -> Store.with_first_delta in
-    let _, delta = wither sfile.store ~f:(fun wnode ->
+    let _, delta = wither ~tags sfile.store ~f:(fun wnode ->
       Db.with_hashes db ~f:(fun elts ->
         Store.with_temp_in rdfile ~gzip:false ~f:(fun rnode ->
           Scan.merge_hashes elts rnode wnode)))
@@ -73,11 +73,11 @@ let scan_or_update op (sfile : SureFile.t) =
   ) in
   Unix.unlink dbname
 
-let scan_act (sfile : SureFile.t) =
-  scan_or_update `Scan sfile
+let scan_act (sfile : SureFile.t) tags =
+  scan_or_update `Scan sfile tags
 
-let update_act (sfile : SureFile.t) =
-  scan_or_update `Update sfile
+let update_act (sfile : SureFile.t) tags =
+  scan_or_update `Update sfile tags
 
 let with_tdir ~f =
   let tdir = Filename.temp_dir "osure" "" in
@@ -92,7 +92,7 @@ let with_tdir ~f =
 let check_act (sfile : SureFile.t) =
   with_tdir ~f:(fun tdir ->
     let tstore = Store.parse (tdir ^/ "2sure.dat.gz") in
-    scan_or_update `Scan { sfile with store = tstore };
+    scan_or_update `Scan { sfile with store = tstore } [];
     Store.with_rev sfile.store `Latest ~f:(fun prior ->
       Store.with_rev tstore `Latest ~f:(fun current ->
         Compare.compare prior current)))
@@ -110,12 +110,24 @@ let general act summary =
       fun () -> act sfile
     end
 
+let tagged act summary =
+  Command.basic ~summary
+    begin
+      let open Command.Let_syntax in
+      let%map_open sfile = SureFile.t_param
+      and tags = flag "--tag" ~aliases:["-t"] (listed string)
+        ~doc:"Add tag as key=value" in
+      fun () ->
+        let tags = List.map tags ~f:Weave.Tags.from_equal in
+        act sfile tags
+    end
+
 let () =
   (* let open Command.Let_syntax in *)
   Command.group
     ~summary:"Rsure"
-    [("scan", general scan_act "Scan a directory for the first time");
-      ("update", general update_act "Update the scan using the dat file");
+    [("scan", tagged scan_act "Scan a directory for the first time");
+      ("update", tagged update_act "Update the scan using the dat file");
       ("list", general list_act "List revisions in a given sure store");
       ("check", general check_act "Compare the directory with the dat file");
       ("signoff", general signoff_act "Compare the last two version in dat file") ]
