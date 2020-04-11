@@ -85,7 +85,7 @@ let with_first_delta ns ~tags ~f =
   Unix.rename ~src:tname ~dst:mname;
   (result, 1)
 
-let diff_re = Re2.of_string {|^(\d+)(,(\d+))?([acd])|}
+let diff_re = Re.compile (Re.Pcre.re {|^(\d+)(,(\d+))?([acd])|})
 
 module Delta_state = struct
   type t = {
@@ -166,17 +166,18 @@ let with_new_delta ns ~tags ~f =
       let dpush = Delta_pusher.make main_rd ~delta:last in
       let state = Shell.run_fold "diff" [oldtname; tname] ~expect:[0; 1]
         ~init:(DS.make delwr dpush (last + 1)) ~f:(fun state line ->
-          begin match Re2.find_submatches diff_re line with
-            | Error _ ->
+          begin match Re.exec_opt diff_re line with
+            | None ->
                 (* printf "diff: %S\n" line; *)
                 if String.length line >= 2 && Char.(=) line.[0] '>' then
                   delwr#plain (String.subo line ~pos:2);
                 (state, `Continue)
-            | Ok pats ->
+            | Some pats ->
                 let state = DS.diffy state in
-                let low = Int.of_string (Option.value_exn pats.(1)) in
-                let high = Option.value_map pats.(3) ~default:low ~f:(Int.of_string) in
-                let cmd = Option.value_exn pats.(4) in
+                let low = Int.of_string (Re.Group.get pats 1) in
+                let high = if Re.Group.test pats 3 then
+                  Int.of_string (Re.Group.get pats 3) else low in
+                let cmd = Re.Group.get pats 4 in
                 (* printf "%d,%d %S\n" low high cmd; *)
                 (DS.change state low high cmd, `Continue)
           end) in
