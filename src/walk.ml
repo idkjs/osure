@@ -30,7 +30,12 @@ let walk path =
   let open Se.Generator in
   let rec walk path name stat =
     (* printf "Walk: %s\n" path; *)
-    let dirs, files = scan_dir path in
+    let dirs, files =
+      if root_stat.st_dev = stat.Unix.st_dev then
+        scan_dir path
+      else
+        [], []
+    in
     yield @@ Node.Enter (name, Node.stat_to_atts (path ^/ name) stat) >>= fun () ->
     subdirs path dirs >>= fun () ->
     yield Node.Sep >>= fun () ->
