@@ -2,3 +2,7 @@
  (name osure)
  (libraries core yojson fileutils osure weave)
  (preprocess (pps ppx_let)))
+
+(env
+  (release
+    (ocamlopt_flags (:standard -O3))))
