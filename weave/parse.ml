@@ -23,14 +23,14 @@ let rec next_line rd =
   match rd#read_line with
     | None -> Done
     | Some line ->
-        if String.length line > 3 && Char.(=) line.[0] '\x01' then begin
+        if String.length line > 3 && Char.(line.[0] = '\x01') then begin
           match line.[1] with
             | 'E' -> End (field line)
             | 'I' -> Insert (field line)
             | 'D' -> Delete (field line)
             | 't' -> Header (String.subo line ~pos:2)
             | _ -> next_line rd
-        end else if String.length line > 1 && Char.(=) line.[0] '\x01' then
+        end else if String.length line > 1 && Char.(line.[0] = '\x01') then
           next_line rd
         else
           Plain line
