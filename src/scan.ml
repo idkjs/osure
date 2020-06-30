@@ -204,13 +204,15 @@ module Threaded_hash : Hasher = struct
 
   let make ~hstate db =
     let finish = Channel.create ~bound:(2 * ncpu) in
-    let collector = Thread.create (hash_collector finish ~hstate) db in
+    let collector = Thread.create (hash_collector finish ~hstate) db
+      ~on_uncaught_exn:`Kill_whole_process
+    in
     let t = {
       work = Channel.create ~bound:(2 * ncpu);
       finish;
       collector } in
     for _ = 1 to nworkers do
-      let _ = Thread.create hash_worker t in
+      let _ = Thread.create hash_worker t ~on_uncaught_exn:`Kill_whole_process in
       ()
     done;
     t
