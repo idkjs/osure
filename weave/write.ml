@@ -79,7 +79,7 @@ let with_first_delta ns ~tags ~f =
     dwr#insert 1;
     let result = f wr in
     dwr#ending 1;
-    result) in
+    result) () in
   let mname = ns#main_file in
   printf "Rename %S to %S\n" tname mname;
   Unix.rename ~src:tname ~dst:mname;
@@ -145,7 +145,7 @@ let with_new_delta ns ~tags ~f =
 
   (* Call the user-code to write the contents to a temporary file. *)
   let (tname, result) = Naming.with_new_temp ns ~compressed:false ~f:(fun wr ->
-    f wr) in
+    f wr) () in
   (* printf "Tmp: %S\n" tname; *)
 
   let header = read_header ns in
@@ -155,7 +155,7 @@ let with_new_delta ns ~tags ~f =
   let (oldtname, _) =
     Naming.with_main_reader ns ~f:(fun rd ->
       Naming.with_new_temp ns ~compressed:false ~f:(fun wr ->
-        Write_pusher.run rd ~delta:last ~ustate:wr)) in
+        Write_pusher.run rd ~delta:last ~ustate:wr) ()) in
   (* printf "Old: %S\n" oldtname; *)
 
   let (toutname, _) = Naming.with_new_temp ns ~compressed:true ~f:(fun wr ->
@@ -181,7 +181,7 @@ let with_new_delta ns ~tags ~f =
                 (* printf "%d,%d %S\n" low high cmd; *)
                 (DS.change state low high cmd, `Continue)
           end) in
-      DS.finish state))
+      DS.finish state)) ()
   in
   (* printf "toutname: %S\n" toutname; *)
   let mname = ns#main_file in

@@ -22,7 +22,7 @@ let with_main_reader sn = Stream.with_in ~gzip:sn#is_compressed sn#main_file
 (* Open a new temp file, for writing, and invoke the function to write
  * the contents, and then close the file.  Returns the filename at the
  * end. *)
-let with_new_temp sn ?(compressed=true) ~f =
+let with_new_temp sn ?(compressed=true) ~f () =
   let wr = sn#new_temp compressed in
   let name = wr#name in
   let res = try Ok (f wr) with

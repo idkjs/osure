@@ -67,7 +67,7 @@ let with_rev st rev ~f =
 let with_temp st ~f =
   Weave.Naming.with_new_temp st.ns ~compressed:false ~f:(fun wr ->
     wr#write_lines ["asure-2.0"; "-----"];
-    f (fun node -> wr#write_lines [Node.show node]))
+    f (fun node -> wr#write_lines [Node.show node])) ()
 
 let with_temp_in fname ~gzip ~f =
   Weave.Stream.with_in fname ~gzip ~f:(fun rd ->
@@ -85,7 +85,7 @@ let with_temp_db st ~f =
     let _ = Sqlite3.db_close db in (* TODO warn if can't close *)
     match result with
       | Ok result -> result
-      | Error ex -> raise ex)
+      | Error ex -> raise ex) ()
 
 let with_first_delta ?(tags=[]) st ~f =
   Weave.Write.with_first_delta st.ns ~tags ~f:(fun wr ->
